@@ -5,15 +5,15 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Load environment variables first
+dotenv.config();
+
 // Import API routes
 import mealRoutes from './api/routes/meal.routes';
-import authRoutes from './api/routes/auth.routes';
+import authRoutes from './api/controllers/auth.controller';
 
-// Initialize Firebase
+// Initialize Firebase (after environment variables are loaded)
 import './api/config/firebase';
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;

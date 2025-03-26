@@ -6,14 +6,11 @@ import {
   updateMeal, 
   deleteMeal 
 } from '../controllers/meal.controller';
-import authenticate from '../middleware/auth.middleware';
 import { validateMeal } from '../middleware/validation.middleware';
 
 const router = Router();
 
-// All routes require authentication
-router.use(authenticate);
-
+// Routes no longer require server-side authentication
 // GET /api/meals - Get all meals for the authenticated user
 router.get('/', getMeals);
 

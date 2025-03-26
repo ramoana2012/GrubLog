@@ -1,12 +1,12 @@
 export enum Difficulty {
-  EASY = 'easy',
-  MEDIUM = 'medium',
-  HARD = 'hard'
+  EASY = 'Easy',
+  MEDIUM = 'Medium',
+  HARD = 'Hard'
 }
 
 export enum Nutrition {
-  HEALTHY = 'healthy',
-  UNHEALTHY = 'unhealthy'
+  HEALTHY = 'Healthy',
+  UNHEALTHY = 'Unhealthy'
 }
 
 export interface Meal {

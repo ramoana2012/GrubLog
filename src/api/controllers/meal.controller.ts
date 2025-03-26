@@ -1,5 +1,17 @@
 import { Request, Response } from 'express';
-import { db } from '../config/firebase';
+import { 
+  db, 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  doc, 
+  getDocs, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc 
+} from '../config/firebase';
 import { Meal } from '../models/meal.model';
 
 // Collection reference
@@ -10,30 +22,51 @@ const mealsCollection = 'meals';
  */
 export const getMeals = async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
+    // Get user ID from request headers or body
+    const userId = req.headers['x-user-id'] as string || req.body.userId;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
-
-    const userId = req.user.uid;
     
     // Query meals for the specific user
-    const mealsSnapshot = await db.collection(mealsCollection)
-      .where('userId', '==', userId)
-      .orderBy('date', 'desc')
-      .get();
+    const mealsCollectionRef = collection(db, mealsCollection);
+    
+    // Filter by userId to ensure users only access their own data
+    const mealsQuery = query(
+      mealsCollectionRef,
+      where('userId', '==', userId),
+      orderBy('date', 'desc')
+    );
+    
+    const mealsSnapshot = await getDocs(mealsQuery);
     
     const meals: Meal[] = [];
     
-    mealsSnapshot.forEach(doc => {
+    mealsSnapshot.forEach((docSnapshot) => {
       meals.push({
-        id: doc.id,
-        ...doc.data() as Omit<Meal, 'id'>
+        id: docSnapshot.id,
+        ...docSnapshot.data() as Omit<Meal, 'id'>
       });
     });
     
     return res.status(200).json(meals);
   } catch (error) {
     console.error('Error getting meals:', error);
+    
+    if (error instanceof Error) {
+      if (error.message.includes('permission-denied')) {
+        return res.status(403).json({ 
+          error: 'Permission denied',
+          message: 'The current user does not have permission to access these meals.'
+        });
+      }
+      
+      if (error.message.includes('unavailable')) {
+        return res.status(503).json({ error: 'Service unavailable. Please try again later.' });
+      }
+    }
+    
     return res.status(500).json({ error: 'Failed to get meals' });
   }
 };
@@ -43,29 +76,32 @@ export const getMeals = async (req: Request, res: Response) => {
  */
 export const getMealById = async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
+    // Get user ID from request headers or body
+    const userId = req.headers['x-user-id'] as string || req.body.userId;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
-
-    const userId = req.user.uid;
+    
     const mealId = req.params.id;
     
     // Get the meal document
-    const mealDoc = await db.collection(mealsCollection).doc(mealId).get();
+    const mealDocRef = doc(db, mealsCollection, mealId);
+    const mealDocSnapshot = await getDoc(mealDocRef);
     
-    if (!mealDoc.exists) {
+    if (!mealDocSnapshot.exists()) {
       return res.status(404).json({ error: 'Meal not found' });
     }
     
-    const mealData = mealDoc.data() as Meal;
+    const mealData = mealDocSnapshot.data() as Meal;
     
     // Verify that the meal belongs to the authenticated user
     if (mealData.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
+      return res.status(403).json({ error: 'Access denied. You can only access your own meals.' });
     }
     
     return res.status(200).json({
-      id: mealDoc.id,
+      id: mealDocSnapshot.id,
       ...mealData
     });
   } catch (error) {
@@ -79,26 +115,36 @@ export const getMealById = async (req: Request, res: Response) => {
  */
 export const createMeal = async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
-    const userId = req.user.uid;
-    const now = new Date().toISOString();
+    // Get user ID from request body or headers
+    const userId = req.body.userId || req.headers['x-user-id'] as string;
     
-    // Prepare meal data
-    const mealData: Meal = {
-      ...req.body,
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+    
+    // Extract meal data from request body
+    const { name, date, difficulty, nutrition, cuisine, rating, notes } = req.body;
+    
+    // Create meal object with required fields
+    const mealData: Omit<Meal, 'id'> = {
       userId,
-      createdAt: now,
-      updatedAt: now
+      name,
+      date,
+      difficulty,
+      nutrition,
+      cuisine,
+      rating: parseFloat(rating),
+      notes: notes || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
     
-    // Add the meal to Firestore
-    const mealRef = await db.collection(mealsCollection).add(mealData);
+    // Add meal to Firestore
+    const mealsCollectionRef = collection(db, mealsCollection);
+    const docRef = await addDoc(mealsCollectionRef, mealData);
     
     return res.status(201).json({
-      id: mealRef.id,
+      id: docRef.id,
       ...mealData
     });
   } catch (error) {
@@ -112,40 +158,53 @@ export const createMeal = async (req: Request, res: Response) => {
  */
 export const updateMeal = async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
+    // Get user ID from request body or headers
+    const userId = req.body.userId || req.headers['x-user-id'] as string;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
-
-    const userId = req.user.uid;
+    
     const mealId = req.params.id;
     
-    // Get the meal document
-    const mealDoc = await db.collection(mealsCollection).doc(mealId).get();
+    // Get the meal document to verify ownership
+    const mealDocRef = doc(db, mealsCollection, mealId);
+    const mealDocSnapshot = await getDoc(mealDocRef);
     
-    if (!mealDoc.exists) {
+    if (!mealDocSnapshot.exists()) {
       return res.status(404).json({ error: 'Meal not found' });
     }
     
-    const mealData = mealDoc.data() as Meal;
+    const existingMealData = mealDocSnapshot.data() as Meal;
     
     // Verify that the meal belongs to the authenticated user
-    if (mealData.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (existingMealData.userId !== userId) {
+      return res.status(403).json({ error: 'Access denied. You can only update your own meals.' });
     }
     
-    // Prepare updated meal data
+    // Extract meal data from request body
+    const { name, date, difficulty, nutrition, cuisine, rating, notes } = req.body;
+    
+    // Update meal object
     const updatedMealData = {
-      ...req.body,
-      userId, // Ensure userId remains unchanged
+      name,
+      date,
+      difficulty,
+      nutrition,
+      cuisine,
+      rating: parseFloat(rating),
+      notes: notes || '',
       updatedAt: new Date().toISOString()
     };
     
-    // Update the meal in Firestore
-    await db.collection(mealsCollection).doc(mealId).update(updatedMealData);
+    // Update meal in Firestore
+    await updateDoc(mealDocRef, updatedMealData);
     
     return res.status(200).json({
       id: mealId,
-      ...updatedMealData
+      userId,
+      ...updatedMealData,
+      createdAt: existingMealData.createdAt
     });
   } catch (error) {
     console.error('Error updating meal:', error);
@@ -158,29 +217,32 @@ export const updateMeal = async (req: Request, res: Response) => {
  */
 export const deleteMeal = async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
+    // Get user ID from request headers or body
+    const userId = req.headers['x-user-id'] as string || req.body.userId;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
-
-    const userId = req.user.uid;
+    
     const mealId = req.params.id;
     
-    // Get the meal document
-    const mealDoc = await db.collection(mealsCollection).doc(mealId).get();
+    // Get the meal document to verify ownership
+    const mealDocRef = doc(db, mealsCollection, mealId);
+    const mealDocSnapshot = await getDoc(mealDocRef);
     
-    if (!mealDoc.exists) {
+    if (!mealDocSnapshot.exists()) {
       return res.status(404).json({ error: 'Meal not found' });
     }
     
-    const mealData = mealDoc.data() as Meal;
+    const mealData = mealDocSnapshot.data() as Meal;
     
     // Verify that the meal belongs to the authenticated user
     if (mealData.userId !== userId) {
-      return res.status(403).json({ error: 'Access denied' });
+      return res.status(403).json({ error: 'Access denied. You can only delete your own meals.' });
     }
     
-    // Delete the meal from Firestore
-    await db.collection(mealsCollection).doc(mealId).delete();
+    // Delete meal from Firestore
+    await deleteDoc(mealDocRef);
     
     return res.status(200).json({ message: 'Meal deleted successfully' });
   } catch (error) {

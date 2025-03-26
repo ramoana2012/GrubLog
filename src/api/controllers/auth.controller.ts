@@ -1,55 +1,35 @@
-import { Request, Response } from 'express';
-import admin from '../config/firebase';
+import { Request, Response, NextFunction } from 'express';
 
-/**
- * Verify user token and return user data
- */
-export const verifyToken = async (req: Request, res: Response) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
+// Extend Express Request interface to include user property
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        uid: string;
+        email?: string;
+      };
     }
-
-    // Get user details from Firebase
-    const userRecord = await admin.auth().getUser(req.user.uid);
-    
-    // Return user data (excluding sensitive information)
-    return res.status(200).json({
-      uid: userRecord.uid,
-      email: userRecord.email,
-      displayName: userRecord.displayName,
-      photoURL: userRecord.photoURL,
-      emailVerified: userRecord.emailVerified
-    });
-  } catch (error) {
-    console.error('Error verifying token:', error);
-    return res.status(500).json({ error: 'Failed to verify token' });
   }
-};
+}
 
 /**
- * Create a custom token for testing purposes (development only)
- * This should not be used in production
+ * Simple middleware that accepts user ID and email from request body or headers
+ * This relies on client-side authentication only
  */
-export const createCustomToken = async (req: Request, res: Response) => {
-  // Only available in development environment
-  if (process.env.NODE_ENV !== 'development') {
-    return res.status(403).json({ error: 'This endpoint is only available in development mode' });
+export default function authenticate(req: Request, res: Response, next: NextFunction) {
+  // Get user ID from request body or headers
+  const userId = req.body.userId || req.headers['x-user-id'];
+  const userEmail = req.body.email || req.headers['x-user-email'];
+  
+  if (!userId) {
+    return res.status(400).json({ 
+      error: 'User ID is required',
+      details: 'Please provide a user ID in the request body or x-user-id header'
+    });
   }
   
-  try {
-    const { uid } = req.body;
-    
-    if (!uid) {
-      return res.status(400).json({ error: 'UID is required' });
-    }
-    
-    // Create a custom token
-    const customToken = await admin.auth().createCustomToken(uid);
-    
-    return res.status(200).json({ customToken });
-  } catch (error) {
-    console.error('Error creating custom token:', error);
-    return res.status(500).json({ error: 'Failed to create custom token' });
-  }
-};
+  // Add user to request object
+  req.user = { uid: userId, email: userEmail };
+  
+  next();
+}

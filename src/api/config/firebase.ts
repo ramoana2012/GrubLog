@@ -1,31 +1,49 @@
-import * as admin from 'firebase-admin';
-import * as dotenv from 'dotenv';
+// Import Firebase modules
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection as firestoreCollection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  getDoc,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc
+} from 'firebase/firestore';
 
-dotenv.config();
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID
+};
 
-// Initialize Firebase Admin SDK
-try {
-  // For production, use environment variables or service account file
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      databaseURL: process.env.FIREBASE_DATABASE_URL
-    });
-  } else {
-    // For development, you can use a service account file
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-      databaseURL: process.env.FIREBASE_DATABASE_URL
-    });
-  }
-  
-  console.log('Firebase Admin SDK initialized successfully');
-} catch (error) {
-  console.error('Error initializing Firebase Admin SDK:', error);
-}
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-// Export Firestore instance
-export const db = admin.firestore();
-export default admin;
+// Export all Firebase modules and instances
+export { 
+  app, 
+  auth, 
+  db,
+  firestoreCollection as collection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  getDoc,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc
+};
