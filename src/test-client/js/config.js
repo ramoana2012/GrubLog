@@ -1,16 +1,40 @@
 // Firebase configuration and UI utilities
-// In a real app, these would be loaded from environment variables
-const firebaseConfig = {
-  apiKey: "AIzaSyD35irGm_EI20dVMeWlR7mxjT2O3xisXxo",
-  authDomain: "grublog-4863a.firebaseapp.com",
-  projectId: "grublog-4863a",
-  storageBucket: "grublog-4863a.firebasestorage.app",
-  messagingSenderId: "473006181517",
-  appId: "1:473006181517:web:68f9bd285d474fccdd26c4"
+// Load configuration from window.ENV or use a fetch request to get config from server
+const getFirebaseConfig = async () => {
+  try {
+    // Determine the base URL based on the current environment
+    const baseUrl = window.location.protocol === 'file:' 
+      ? 'http://localhost:4000' // When opened directly from file system
+      : window.location.origin; // When served through Express (use absolute path)
+    
+    // Try to fetch configuration from the server
+    const response = await fetch(`${baseUrl}/api/config`);
+    if (response.ok) {
+      const config = await response.json();
+      return config.firebase;
+    } else {
+      throw new Error('Failed to fetch configuration');
+    }
+  } catch (error) {
+    console.error('Error loading config from server:', error);
+    throw error;
+  }
 };
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+// Initialize Firebase asynchronously
+(async () => {
+  try {
+    const firebaseConfig = await getFirebaseConfig();
+    firebase.initializeApp(firebaseConfig);
+    console.log('Firebase initialized successfully');
+    
+    // Dispatch an event to notify other scripts that Firebase is ready
+    document.dispatchEvent(new CustomEvent('firebaseReady'));
+  } catch (error) {
+    console.error('Failed to initialize Firebase:', error);
+    showError('Failed to initialize Firebase. Please try again later.');
+  }
+})();
 
 // Loading indicator functions
 function showLoading() {

@@ -14,19 +14,25 @@ const logoutButtonElement = document.getElementById('logout-button');
 const mealFormSectionElement = document.getElementById('meal-form-section');
 const mealsListSectionElement = document.getElementById('meals-list-section');
 
-// Initialize auth state
-firebase.auth().onAuthStateChanged((user) => {
-  hideLoading(); // Hide loading when auth state changes
-  if (user) {
-    // User is signed in
-    currentUser = user;
-    updateAuthUI(true);
-    loadMeals(); // Load meals when user is authenticated
-  } else {
-    // User is signed out
-    currentUser = null;
-    updateAuthUI(false);
-  }
+// Wait for Firebase to be initialized before setting up auth
+document.addEventListener('firebaseReady', () => {
+  // Initialize auth state
+  firebase.auth().onAuthStateChanged((user) => {
+    hideLoading(); // Hide loading when auth state changes
+    if (user) {
+      // User is signed in
+      currentUser = user;
+      updateAuthUI(true);
+      loadMeals(); // Load meals when user is authenticated
+    } else {
+      // User is signed out
+      currentUser = null;
+      updateAuthUI(false);
+    }
+  });
+
+  // Set up event listeners
+  setupEventListeners();
 });
 
 // Update the UI based on authentication state
@@ -116,60 +122,62 @@ async function signOut() {
   }
 }
 
-// Event Listeners
-loginButtonElement.addEventListener('click', () => {
-  const email = document.getElementById('email').value;
-  const password = document.getElementById('password').value;
-  
-  if (!email || !password) {
-    showError('Email and password are required');
-    return;
-  }
-  
-  signInWithEmailPassword(email, password);
-});
-
-registerButtonElement.addEventListener('click', () => {
-  const email = document.getElementById('email').value;
-  const password = document.getElementById('password').value;
-  
-  if (!email || !password) {
-    showError('Email and password are required');
-    return;
-  }
-  
-  if (password.length < 6) {
-    showError('Password should be at least 6 characters');
-    return;
-  }
-  
-  registerWithEmailPassword(email, password);
-});
-
-googleLoginButtonElement.addEventListener('click', signInWithGoogle);
-logoutButtonElement.addEventListener('click', signOut);
-
-// Test API connection
-document.getElementById('debug-button').addEventListener('click', async () => {
-  try {
-    showLoading();
-    const user = firebase.auth().currentUser;
+// Set up event listeners
+function setupEventListeners() {
+  loginButtonElement.addEventListener('click', () => {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
     
-    if (!user) {
-      showError('You must be logged in to test the API connection');
-      hideLoading();
+    if (!email || !password) {
+      showError('Email and password are required');
       return;
     }
     
-    // Test Firestore connection
-    const mealsCollection = firebase.firestore().collection('meals');
-    const query = mealsCollection.where('userId', '==', user.uid).limit(1);
-    const snapshot = await query.get();
+    signInWithEmailPassword(email, password);
+  });
+
+  registerButtonElement.addEventListener('click', () => {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
     
-    hideLoading();
-    showSuccess(`API connection successful! Found ${snapshot.size} meals.`);
-  } catch (error) {
-    hideLoading();
-    showError(`API connection error: ${error.message}`);
-  }
-});
+    if (!email || !password) {
+      showError('Email and password are required');
+      return;
+    }
+    
+    if (password.length < 6) {
+      showError('Password should be at least 6 characters');
+      return;
+    }
+    
+    registerWithEmailPassword(email, password);
+  });
+
+  googleLoginButtonElement.addEventListener('click', signInWithGoogle);
+  logoutButtonElement.addEventListener('click', signOut);
+
+  // Test API connection
+  document.getElementById('debug-button').addEventListener('click', async () => {
+    try {
+      showLoading();
+      const user = firebase.auth().currentUser;
+      
+      if (!user) {
+        showError('You must be logged in to test the API connection');
+        hideLoading();
+        return;
+      }
+      
+      // Test Firestore connection
+      const mealsCollection = firebase.firestore().collection('meals');
+      const query = mealsCollection.where('userId', '==', user.uid).limit(1);
+      const snapshot = await query.get();
+      
+      hideLoading();
+      showSuccess(`API connection successful! Found ${snapshot.size} meals.`);
+    } catch (error) {
+      hideLoading();
+      showError(`API connection error: ${error.message}`);
+    }
+  });
+}

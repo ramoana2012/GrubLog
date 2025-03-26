@@ -20,6 +20,12 @@ const mealNotesInput = document.getElementById('meal-notes');
 const saveMealButtonElement = document.getElementById('save-meal-button');
 const cancelEditButtonElement = document.getElementById('cancel-edit-button');
 
+// Wait for Firebase to be initialized before setting up meal functionality
+document.addEventListener('firebaseReady', () => {
+  // Set up event listeners
+  setupMealEventListeners();
+});
+
 // Load meals directly from Firestore
 async function loadMeals() {
   try {
@@ -202,19 +208,26 @@ async function deleteMeal(mealId) {
   try {
     showLoading();
     
+    // Get the current user
+    const user = firebase.auth().currentUser;
+    if (!user) {
+      showError('You must be logged in to delete a meal');
+      return;
+    }
+    
     // Reference to the meal document
     const mealRef = firebase.firestore().collection('meals').doc(mealId);
     
     // Delete the meal
     await mealRef.delete();
     
-    // Remove from meals array
+    // Remove from local array
     meals = meals.filter(meal => meal.id !== mealId);
     
-    // Render meals
+    // Re-render meals
     renderMeals();
     
-    showSuccess('Meal deleted successfully!');
+    showSuccess('Meal deleted successfully');
   } catch (error) {
     showError(`Failed to delete meal: ${error.message}`);
   } finally {
@@ -233,27 +246,17 @@ function resetMealForm() {
 async function saveMeal(event) {
   event.preventDefault();
   
-  // Validate form
-  if (!mealFormElement.checkValidity()) {
-    mealFormElement.reportValidity();
-    return;
-  }
-  
-  // Get current user
-  const user = firebase.auth().currentUser;
-  if (!user) {
-    showError('You must be logged in to save a meal');
-    return;
-  }
-  
   try {
     showLoading();
     
-    // Reference to the meals collection
-    const mealsCollection = firebase.firestore().collection('meals');
+    // Get the current user
+    const user = firebase.auth().currentUser;
+    if (!user) {
+      showError('You must be logged in to save a meal');
+      return;
+    }
     
-    // Prepare meal data
-    const now = new Date().toISOString();
+    // Get form values
     const mealData = {
       name: mealNameInput.value,
       date: new Date(mealDateInput.value).toISOString(),
@@ -263,43 +266,49 @@ async function saveMeal(event) {
       rating: parseFloat(mealRatingInput.value),
       notes: mealNotesInput.value,
       userId: user.uid,
-      updatedAt: now
+      updatedAt: new Date().toISOString()
     };
+    
+    // Reference to the meals collection
+    const mealsCollection = firebase.firestore().collection('meals');
     
     if (currentEditingMealId) {
       // Update existing meal
       const mealRef = mealsCollection.doc(currentEditingMealId);
       await mealRef.update(mealData);
       
-      // Update meals array
+      // Update in local array
       const index = meals.findIndex(meal => meal.id === currentEditingMealId);
       if (index !== -1) {
         meals[index] = {
-          id: currentEditingMealId,
+          ...meals[index],
           ...mealData
         };
       }
       
-      showSuccess('Meal updated successfully!');
+      showSuccess('Meal updated successfully');
     } else {
       // Add createdAt for new meals
-      mealData.createdAt = now;
+      mealData.createdAt = new Date().toISOString();
       
       // Create new meal
       const docRef = await mealsCollection.add(mealData);
       
-      // Add to meals array
+      // Add to local array
       meals.push({
         id: docRef.id,
         ...mealData
       });
       
-      showSuccess('Meal added successfully!');
+      showSuccess('Meal added successfully');
     }
     
-    // Reset form and render meals
+    // Reset form and re-render
     resetMealForm();
     renderMeals();
+    
+    // Scroll to meals list
+    mealsListElement.scrollIntoView({ behavior: 'smooth' });
   } catch (error) {
     showError(`Failed to save meal: ${error.message}`);
   } finally {
@@ -307,10 +316,12 @@ async function saveMeal(event) {
   }
 }
 
-// Event Listeners
-addMealButtonElement.addEventListener('click', addNewMeal);
-mealFormElement.addEventListener('submit', saveMeal);
-cancelEditButtonElement.addEventListener('click', () => {
-  resetMealForm();
-  mealFormTitleElement.textContent = 'Add New Meal';
-});
+// Set up event listeners
+function setupMealEventListeners() {
+  addMealButtonElement.addEventListener('click', addNewMeal);
+  mealFormElement.addEventListener('submit', saveMeal);
+  cancelEditButtonElement.addEventListener('click', () => {
+    resetMealForm();
+    mealsListElement.scrollIntoView({ behavior: 'smooth' });
+  });
+}
